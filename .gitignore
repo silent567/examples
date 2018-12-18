@@ -2,3 +2,6 @@ dcgan/data
 data
 *.pyc
 OpenNMT/data
+
+# added tang 20181218 
+env
