@@ -91,6 +91,8 @@ class torch_gfusedlasso(torch.autograd.Function):
         '''
         if not torch.is_tensor(lam):
             lam = torch.zeros([],device=input.device,dtype=input.dtype) + lam
+        if A.size()[0] == 1:
+            A = A.expand([x.size()[0],]+[-1]*(len(A.size())-1))
 
         M = input.size()[dim]
         input_reshape_size = input.size()
