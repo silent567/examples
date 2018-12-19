@@ -45,7 +45,7 @@ hyperparameter_choices = {
     'norm_flag': [True,False],
     'gamma':list(10**np.arange(-1,3,0.5))+[None,],
     'lam':list(10**np.arange(-2,2,0.5)),
-    'max_type':['softmax','sparsemax'],
+    'max_type':['softmax','sparsemax','gfusedmax'],
     # 'max_type':['sparsemax'],
     'optim_type':['SGD','Adam']
 }

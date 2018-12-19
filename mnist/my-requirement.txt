@@ -1,0 +1,15 @@
+cycler==0.10.0
+decorator==4.3.0
+kiwisolver==1.0.1
+matplotlib==3.0.2
+networkx==2.2
+numpy==1.15.4
+Pillow==5.3.0
+pydot==1.4.1
+pygfl==1.0.2
+pyparsing==2.3.0
+python-dateutil==2.7.5
+scipy==1.1.0
+six==1.12.0
+torch==1.0.0
+torchvision==0.2.1
