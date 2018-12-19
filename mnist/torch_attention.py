@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-from torch_mapping import torch_sparsemax
+from torch_mapping import torch_sparsemax, Gfusedmax
 import torch
+import numpy as np
 
 # haven't tested
 class AddAttention(torch.nn.Module):
@@ -31,6 +32,26 @@ class AddAttention(torch.nn.Module):
         output = torch.sum(weights*x,dim=-2)
         return output
 
+def build_graph(kernel_size):
+    size = kernel_size *kernel_size 
+    output = np.zeros([size,size])
+    for i in range(kernel_size):
+        for j in range(i,kernel_size):
+            start_index = i*kernel_size+j
+            if i > 0: 
+                output[start_index,start_index-kernel_size] = 1
+                output[start_index-kernel_size,start_index] = 1
+            if i < kernel_size-1:
+                output[start_index,start_index+kernel_size] = 1
+                output[start_index+kernel_size,start_index] = 1
+            if j > 0:
+                output[start_index,start_index-1] = 1
+                output[start_index-1,start_index] = 1
+            if j < kernel_size-1:
+                output[start_index,start_index+1] = 1
+                output[start_index+1,start_index] = 1
+    return output
+
 class ConvAddAttention(torch.nn.Module):
     def __init__(self,input_size,output_size,kernel_size,stride_size,max_type='softmax',layer_norm_flag=True,lam=1.0,gamma=1.0,query_size=0):
         super(ConvAddAttention,self).__init__()
@@ -40,6 +61,11 @@ class ConvAddAttention(torch.nn.Module):
             else:
                 self.gamma = gamma
             self.mapping_func = lambda x,dim: torch_sparsemax.apply(x,dim,self.gamma)
+        else max_type == 'gfusedmax':
+            self.gamma = gamma if gamma is not None else 1.0
+            self.lam = lam if lam is not None else 1.0 
+            self.register_buffer('input_A',torch.from_numpy(build_graph(kernel_size)).unsqueeze_(0).unsqueeze_(-1))
+            self.mapping_func = lambda x,dim: Gfusedmax(gamma,lam)(x,A,dim)
         else:
             self.mapping_func = torch.nn.functional.softmax
 
