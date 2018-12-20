@@ -33,12 +33,12 @@ class AddAttention(torch.nn.Module):
         return output
 
 def build_graph(kernel_size):
-    size = kernel_size *kernel_size 
+    size = kernel_size *kernel_size
     output = np.zeros([size,size])
     for i in range(kernel_size):
         for j in range(i,kernel_size):
             start_index = i*kernel_size+j
-            if i > 0: 
+            if i > 0:
                 output[start_index,start_index-kernel_size] = 1
                 output[start_index-kernel_size,start_index] = 1
             if i < kernel_size-1:
@@ -61,11 +61,12 @@ class ConvAddAttention(torch.nn.Module):
             else:
                 self.gamma = gamma
             self.mapping_func = lambda x,dim: torch_sparsemax.apply(x,dim,self.gamma)
-        else max_type == 'gfusedmax':
+        elif max_type == 'gfusedmax':
             self.gamma = gamma if gamma is not None else 1.0
-            self.lam = lam if lam is not None else 1.0 
+            self.lam = lam if lam is not None else 1.0
             self.register_buffer('input_A',torch.from_numpy(build_graph(kernel_size)).unsqueeze_(0).unsqueeze_(-1))
-            self.mapping_func = lambda x,dim: Gfusedmax(gamma,lam)(x,A,dim)
+            self.gfusedmax_module = Gfusedmax(self.gamma,self.lam)
+            self.mapping_func = lambda x,dim: self.gfusedmax_module(x,self.input_A,dim)
         else:
             self.mapping_func = torch.nn.functional.softmax
 
@@ -99,6 +100,7 @@ class ConvAddAttention(torch.nn.Module):
                 scores = torch.reshape(score_x[:,h:h+self.kernel_size,w:w+self.kernel_size,:],[N,-1,1])
                 projs = torch.reshape(proj_x[:,h:h+self.kernel_size,w:w+self.kernel_size,:],[N,-1,self.output_size])
                 weights = self.mapping_func(self.score_norm(scores),dim=-2)
+                # print(scores.size(),weights.size())
                 tmp_output.append(torch.sum(projs * weights,dim=-2))
             output.append(torch.stack(tmp_output,dim=-1))
         output = torch.stack(output,dim=-2)

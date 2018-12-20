@@ -2,7 +2,7 @@
 # coding=utf-8
 
 import torch
-from mapping import sparsemax, gfusedlasso
+from mapping import sparsemax, gfusedlasso, gfusedmax
 
 class torch_sparsemax(torch.autograd.Function):
     @staticmethod
@@ -62,7 +62,7 @@ class torch_sparsemax(torch.autograd.Function):
             # raise ValueError('Commanded to exit')
         return grad_inp, None, grad_gamma
 
-def backward_gfusedmax_torch_1D(input, A, lam, output, grad_output):
+def backward_gfusedmax_torch_1D(output, grad_output):
     '''
     input's shape = [d]
     A's shape = [d,d]
@@ -78,34 +78,37 @@ def backward_gfusedmax_torch_1D(input, A, lam, output, grad_output):
         mask = output == uo
         grad_input[mask] = torch.sum(grad_output[mask])/torch.sum(mask)
 
-    ##### A and lam's gradients to be implemented 
+    ##### A and lam's gradients to be implemented
     return grad_input
-    
 
 class torch_gfusedlasso(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, input, A, dim=-1, lam=1.0):
+    def forward(ctx, inp, A, dim=-1, lam=1.0):
         '''
-        input's shape = [*,M,*]
+        inp's shape = [*,M,*]
         A's shape = [*,M,M,*]
         '''
         if not torch.is_tensor(lam):
-            lam = torch.zeros([],device=input.device,dtype=input.dtype) + lam
+            lam = torch.zeros([],device=inp.device,dtype=inp.dtype) + lam
         if A.size()[0] == 1:
-            A = A.expand([x.size()[0],]+[-1]*(len(A.size())-1))
+            A = A.expand([inp.size()[0],]+[-1]*(len(A.size())-1))
 
-        M = input.size()[dim]
-        input_reshape_size = input.size()
+        M = inp.size()[dim]
+        inp_reshape_size = list(inp.size())
+        inp_reshape_size[dim],inp_reshape_size[-1] = inp_reshape_size[-1],inp_reshape_size[dim]
 
-        input_reshape = torch.reshape(torch.transpose(input,dim,-1),[-1,M])
+        inp_reshape = torch.reshape(torch.transpose(inp,dim,-1),[-1,M])
         A_reshape = torch.reshape(torch.transpose(torch.transpose(A,dim+1,-1),dim,-2),[-1,M,M])
 
-        output_reshape = torch.stack([torch.from_numpy(gfusedlasso(i.detach().numpy(),a.detach().numpy(),lam=lam.item()))
-                                      for i,a in zip(input_reshape.unbind(),A_reshape.unbind())],dim=0)
-        output = torch.transpose(torch.reshape(output_reshape,input_reshape_size),dim,-1)
+        # print(type(lam.item()),lam.item())
+        cpu_detach = lambda x: x.cpu.detach_() if x.is_cuda else x.detach()
+        cuda_back = lambda x: x.cuda() if inp.is_cuda else x
+        output_reshape = torch.stack([torch.from_numpy(gfusedlasso(i.numpy(),a.numpy(),lam=lam.item()))
+                                      for i,a in zip(cpu_detach(inp_reshape).unbind(),cpu_detach(A_reshape).unbind())],dim=0)
+        output = torch.transpose(torch.reshape(cuda_back(output_reshape),inp_reshape_size),dim,-1)
 
-        ctx.dim, ctx.M, ctx.input_reshape_size = dim, M, input_reshape_size
-        ctx.save_for_backward(input_reshape, A_reshape, lam, output_reshape)
+        ctx.dim, ctx.M, ctx.inp_reshape_size = dim, M, inp_reshape_size
+        ctx.save_for_backward(output_reshape)
         return output
 
     @staticmethod
@@ -119,19 +122,20 @@ class torch_gfusedlasso(torch.autograd.Function):
         if len(ctx.needs_input_grad) > 3 and ctx.needs_input_grad[3]:
             raise ValueError('Only gradients for x in the gfusedlasso is implemented')
 
-        input_reshape, A_reshape, lam, output_reshape = ctx.saved_tensors
-        dim, M, input_reshape_size  = ctx.dim, ctx.M, ctx.input_reshape_size
+        output_reshape, = ctx.saved_tensors
+        dim, M, inp_reshape_size  = ctx.dim, ctx.M, ctx.inp_reshape_size
 
         grad_output_reshape = torch.reshape(torch.transpose(grad_output,dim,-1),[-1,M])
-        grad_input_reshape = torch.stack([backward_gfusedmax_torch_1D(i,a,lam,o,go) for i,a,o,go in zip(
-            input_reshape.unbind(), A_reshape.unbind(), output_reshape.unbind(), grad_output_reshape.unbind()
+        grad_inp_reshape = torch.stack([backward_gfusedmax_torch_1D(o,go) for o,go in zip(
+            output_reshape.unbind(), grad_output_reshape.unbind()
         )],dim=0)
-        grad_input = torch.transpose(torch.reshape(grad_input_reshape,input_reshape_size),dim,-1)
-        
-        return (grad_input,)+(None)*(len(ctx.needs_input_grad)-1)
+        grad_inp = torch.transpose(torch.reshape(grad_inp_reshape,inp_reshape_size),dim,-1)
+
+        return (grad_inp,)+(None,)*(len(ctx.needs_input_grad)-1)
 
 class Gfusedmax(torch.nn.Module):
     def __init__(self,gamma=1.0,lam=1.0):
+        super(Gfusedmax,self).__init__()
         self.gfusedlasso_func = lambda x,A,dim: torch_gfusedlasso.apply(x,A,dim,lam)
         self.sparsemax_func = lambda x,dim: torch_sparsemax.apply(x,dim,gamma)
     def forward(self,x,A,dim=-1):
@@ -143,8 +147,17 @@ if __name__ == '__main__':
     size = 10
     a = torch.rand(size,requires_grad=True)
     lam = torch.ones([],requires_grad=True)
-    torch_sparse = torch_sparsemax.apply(a,-1,lam)
-    numpy_sparse = sparsemax(a.detach().numpy(),lam.item())
-    torch_sparse.backward(torch.arange(size,dtype=a.dtype))
-    print(a,torch_sparse,numpy_sparse)
-    print(a.grad, lam.grad)
+    # torch_sparse = torch_sparsemax.apply(a,-1,lam)
+    # numpy_sparse = sparsemax(a.detach().numpy(),lam.item())
+    # torch_sparse.backward(torch.arange(size,dtype=a.dtype))
+    # print(a,torch_sparse,numpy_sparse)
+    # print(a.grad, lam.grad)
+
+    b = a * 30
+    A = (torch.rand(size,size)>0.9).type_as(a)
+    lam = lam.detach()
+    torch_gfusedmax = Gfusedmax(lam,lam)(b,A,-1)
+    numpy_gfusedmax = gfusedmax(b.detach().numpy(),A.numpy(),lam.item(),lam.item())
+    torch_gfusedmax.backward(torch.arange(size,dtype=a.dtype))
+    print(b,torch_gfusedmax,numpy_gfusedmax)
+    print(a.grad,)

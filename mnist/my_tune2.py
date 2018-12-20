@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-from my_main import main
+from my_main2 import main
 import numpy as np
 import argparse
 import time

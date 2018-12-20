@@ -19,10 +19,12 @@ def softmax(z):
     return z_exp/np.sum(z_exp)
 
 def gfusedlasso(z,A,lam=None):
+    # print(type(z),type(A),type(lam))
     A = np.triu(A) > 0
     edges = np.stack(np.mask_indices(A.shape[0],lambda n,k:A),axis=-1)
-    z_fused = solve_gfl(z,edges,lam=lam)
-    return z_fused
+    # print(z.shape,z.dtype,edges.shape,edges.dtype,lam)
+    z_fused = solve_gfl(z.astype(np.float64),edges,lam=lam)
+    return z_fused.astype(z.dtype)
 
 def gfusedmax(z,A,lam=None,gamma=1):
     z_fused = gfusedlasso(z,A,lam)
