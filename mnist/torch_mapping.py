@@ -8,7 +8,7 @@ class torch_sparsemax(torch.autograd.Function):
     @staticmethod
     def forward(ctx, inp, dim=-1, gamma=1.0):
         if not torch.is_tensor(gamma):
-            gamma = torch.zeros([],device=inp.device,dtype=inp.dtype) + gamma
+            gamma = torch.tensor(gamma,device=inp.device,dtype=inp.dtype)
 
         reshape_size = [1]*len(inp.size())
         reshape_size[dim] = -1
@@ -16,11 +16,11 @@ class torch_sparsemax(torch.autograd.Function):
         inp_div = inp / gamma
         inp_sorted,_ = torch.sort(inp_div, dim=dim, descending=True)
         cumsum = torch.cumsum(inp_sorted,dim=dim)
-        mask = (1+torch.arange(1,inp_div.size()[dim]+1,device=inp.device,dtype=torch.float)
+        mask = (1+torch.arange(1,inp_div.size()[dim]+1,device=inp.device,dtype=inp.dtype)
                 .reshape(reshape_size)*inp_sorted) > cumsum
         mask = mask.type_as(inp)
-        tau = (torch.sum(inp_sorted*mask,dim=dim,keepdim=True)-1)/torch.sum(mask,dim=dim,keepdim=True,dtype=torch.float)
-        output = torch.clamp(inp-tau,min=0)
+        tau = (torch.sum(inp_sorted*mask,dim=dim,keepdim=True)-1.)/torch.sum(mask,dim=dim,keepdim=True,dtype=inp.dtype)
+        output = torch.clamp(inp_div-tau,min=0)
 
         ctx.dim = dim
         ctx.save_for_backward(inp, gamma, output)
@@ -101,7 +101,7 @@ class torch_gfusedlasso(torch.autograd.Function):
         A_reshape = torch.reshape(torch.transpose(torch.transpose(A,dim+1,-1),dim,-2),[-1,M,M])
 
         # print(type(lam.item()),lam.item())
-        cpu_detach = lambda x: x.cpu.detach_() if x.is_cuda else x.detach()
+        cpu_detach = lambda x: x.cpu().detach_() if x.is_cuda else x.detach()
         cuda_back = lambda x: x.cuda() if inp.is_cuda else x
         output_reshape = torch.stack([torch.from_numpy(gfusedlasso(i.numpy(),a.numpy(),lam=lam.item()))
                                       for i,a in zip(cpu_detach(inp_reshape).unbind(),cpu_detach(A_reshape).unbind())],dim=0)
@@ -145,19 +145,22 @@ class Gfusedmax(torch.nn.Module):
 
 if __name__ == '__main__':
     size = 10
-    a = torch.rand(size,requires_grad=True)
-    lam = torch.ones([],requires_grad=True)
-    # torch_sparse = torch_sparsemax.apply(a,-1,lam)
-    # numpy_sparse = sparsemax(a.detach().numpy(),lam.item())
-    # torch_sparse.backward(torch.arange(size,dtype=a.dtype))
-    # print(a,torch_sparse,numpy_sparse)
-    # print(a.grad, lam.grad)
+    import numpy as np
+    numpy_a = np.array([ 0.1761,  0.1761,  0.1761,  0.1761,  0.1761,  0.1761,  0.1761,  0.1761, 0.9138,  0.1761,  0.1761,  0.1761,  1.9040, -0.7119,  0.1761,  0.1761])
+    a = torch.tensor(numpy_a,requires_grad=True,dtype=torch.float)
+    # a = torch.rand(size,requires_grad=True)
+    lam = torch.tensor(10.0,requires_grad=True,dtype=torch.float)
+    torch_sparse = torch_sparsemax.apply(a,-1,lam)
+    numpy_sparse = sparsemax(a.detach().numpy(),lam.item())
+    torch_sparse.backward(torch.arange(a.size()[-1],dtype=a.dtype))
+    print(a,torch.sum(torch_sparse),np.sum(numpy_sparse))
+    print(a.grad, lam.grad)
 
-    b = a * 30
-    A = (torch.rand(size,size)>0.9).type_as(a)
-    lam = lam.detach()
-    torch_gfusedmax = Gfusedmax(lam,lam)(b,A,-1)
-    numpy_gfusedmax = gfusedmax(b.detach().numpy(),A.numpy(),lam.item(),lam.item())
-    torch_gfusedmax.backward(torch.arange(size,dtype=a.dtype))
-    print(b,torch_gfusedmax,numpy_gfusedmax)
-    print(a.grad,)
+    # b = a * 30
+    # A = (torch.rand(size,size)>0.9).type_as(a)
+    # lam = lam.detach()
+    # torch_gfusedmax = Gfusedmax(lam,lam)(b,A,-1)
+    # numpy_gfusedmax = gfusedmax(b.detach().numpy(),A.numpy(),lam.item(),lam.item())
+    # torch_gfusedmax.backward(torch.arange(size,dtype=a.dtype))
+    # print(b,torch_gfusedmax,numpy_gfusedmax)
+    # print(a.grad,)
