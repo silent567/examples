@@ -81,8 +81,8 @@ class ConvAddAttention(torch.nn.Module):
             self.score_norm = torch.nn.LayerNorm([self.kernel_size*self.kernel_size,1])
         else:
             self.score_norm = lambda x:x
-        self.proj_func.to('cuda')
-        self.score_func.to('cuda')
+        # self.proj_func.to('cuda')
+        # self.score_func.to('cuda')
     def forward(self,x,q=None):
         '''
         x's shape = [N,C,H,W]
