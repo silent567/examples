@@ -35,28 +35,27 @@ parser.add_argument('--max-type', type=str, default='softmax',choices=['softmax'
                     help='mapping function in attention')
 parser.add_argument('--optim-type', type=str, default='SGD',choices=['SGD','Adam'],
                     help='mapping function in attention')
-parser.add_argument('--test', type=float, default=0.01,
-                    help='learning rate (default: 0.01)')
 
 args = parser.parse_args()
 
 hyperparameter_choices = {
     'lr':list(10**np.arange(-4,-1,0.5)),
     'norm_flag': [True,False],
-    'gamma':list(10**np.arange(-1,3,0.5))+[None,],
+    'gamma':list(10**np.arange(-1,3,0.5)),
     'lam':list(10**np.arange(-2,2,0.5)),
     'max_type':['softmax','sparsemax','gfusedmax'],
-    # 'max_type':['sparsemax'],
     'optim_type':['SGD','Adam']
 }
 
 param_num = 25
 record = np.zeros([param_num,len(hyperparameter_choices)+1])
-record_name = 'record_%s.csv'%time.strftime('%Y-%m-%d_%H-%M-%S',time.localtime())
+record_name = 'record2_%s.csv'%time.strftime('%Y-%m-%d_%H-%M-%S',time.localtime())
 for n in range(param_num):
     for param_index,(k,v) in enumerate(hyperparameter_choices.items()):
         print(param_index,k)
         value_index = np.random.choice(len(v))
+        if k == 'max_type':
+            value_index = 2
         if isinstance(v[value_index],str) or isinstance(v[value_index],bool) or v[value_index] is None:
             record[n,param_index] = value_index
         else:
