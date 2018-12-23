@@ -144,7 +144,7 @@ def main(args = None):
         test_acc = test(args, model, device, test_loader)
 
     if (args.save_model):
-        torch.save(model.state_dict(),"mnist4_multi_%2.1f_%.4f_%s_%s_%d_%.2f_%.2f.pt"%(test_acc*100,args.lr,args.optim_type,args.max_type,args.norm_flag,args.lam,0.123 if args.gamma is None else args.gamma))
+        torch.save(model.state_dict(),"mnist4_multi_%2.1f_%.4f_%s_%s_%d_%.2f_%.2f_%d.pt"%(test_acc*100,args.lr,args.optim_type,args.max_type,args.norm_flag,args.lam,0.123 if args.gamma is None else args.gamma,args.head_cnt))
 
     return test_acc
 
