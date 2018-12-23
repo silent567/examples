@@ -26,7 +26,7 @@ class AddAttention(torch.nn.Module):
         x's shape = [N,M,input_size]
         '''
         scores = self.score_func(x if self.query_size < 1 else torch.cat([x,q]))
-        weights = self.mapping_func.apply(x,dim=-2)
+        weights = self.mapping_func.apply(scores,dim=-2)
         if self.projection_flag:
             x = self.proj_func(x)
         output = torch.sum(weights*x,dim=-2)
@@ -93,7 +93,7 @@ class ConvAddAttention(torch.nn.Module):
         # x = x.reshape([N,H,W,C])
         x = torch.transpose(x,1,3) #[N,W,H,C]
         proj_x = self.proj_func(x) #[N,W,H,C']
-        score_x = self.score_func(x if self.query_size < 1 else torch.cat([x,q.unsqueeze_(1).unsqueeze_(1).expand(-1,W,H,-1)],dim=-1)) #[N,W,H,1] 
+        score_x = self.score_func(x if self.query_size < 1 else torch.cat([x,q.unsqueeze_(1).unsqueeze_(1).expand(-1,W,H,-1)],dim=-1)) #[N,W,H,1]
         output = []
         for h in range(0,H-self.kernel_size+1,self.stride_size):
             tmp_output = []
