@@ -54,6 +54,7 @@ hyperparameter_choices = {
 param_num = 25
 record = np.zeros([param_num,len(hyperparameter_choices)+1])
 record_name = 'record4_multi_%s.csv'%time.strftime('%Y-%m-%d_%H-%M-%S',time.localtime())
+np.savetxt(record_name, record, delimiter=',')
 for n in range(param_num):
     for param_index,(k,v) in enumerate(hyperparameter_choices.items()):
         print(param_index,k)
