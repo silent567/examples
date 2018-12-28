@@ -48,6 +48,8 @@ class torch_sparsemax(torch.autograd.Function):
 
         if ctx.needs_input_grad[1]:
             raise ValueError('No gradient is defined for dim argument of sparsemax')
+        if len(ctx.needs_input_grad) < 3:
+            return grad_inp,None
 
         grad_gamma = None
         if ctx.needs_input_grad[2]:
@@ -136,9 +138,11 @@ class torch_gfusedlasso(torch.autograd.Function):
 class Gfusedmax(torch.nn.Module):
     def __init__(self,gamma=1.0,lam=1.0):
         super(Gfusedmax,self).__init__()
+        self.gamma = gamma
         self.gfusedlasso_func = lambda x,A,dim: torch_gfusedlasso.apply(x,A,dim,lam)
-        self.sparsemax_func = lambda x,dim: torch_sparsemax.apply(x,dim,gamma)
+        self.sparsemax_func = lambda x,dim: torch_sparsemax.apply(x,dim)
     def forward(self,x,A,dim=-1):
+        x /= self.gamma
         fused_x = self.gfusedlasso_func(x,A,dim)
         output = self.sparsemax_func(fused_x,dim)
         return output
