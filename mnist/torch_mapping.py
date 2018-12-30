@@ -142,7 +142,7 @@ class Gfusedmax(torch.nn.Module):
         self.gfusedlasso_func = lambda x,A,dim: torch_gfusedlasso.apply(x,A,dim,lam)
         self.sparsemax_func = lambda x,dim: torch_sparsemax.apply(x,dim)
     def forward(self,x,A,dim=-1):
-        x /= self.gamma
+        x = x / self.gamma
         fused_x = self.gfusedlasso_func(x,A,dim)
         output = self.sparsemax_func(fused_x,dim)
         return output
