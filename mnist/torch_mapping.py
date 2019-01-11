@@ -3,6 +3,11 @@
 
 import torch
 from mapping import sparsemax, gfusedlasso, gfusedmax
+import multiprocessing as mp
+import numpy as np
+import time
+
+process_num = 10
 
 class torch_sparsemax(torch.autograd.Function):
     @staticmethod
@@ -86,6 +91,7 @@ def backward_gfusedmax_torch_1D(output, grad_output):
 class torch_gfusedlasso(torch.autograd.Function):
     @staticmethod
     def forward(ctx, inp, A, dim=-1, lam=1.0):
+        ft = time.time()
         '''
         inp's shape = [*,M,*]
         A's shape = [*,M,M,*]
@@ -105,16 +111,36 @@ class torch_gfusedlasso(torch.autograd.Function):
         # print(type(lam.item()),lam.item())
         cpu_detach = lambda x: x.cpu().detach_() if x.is_cuda else x.detach()
         cuda_back = lambda x: x.cuda() if inp.is_cuda else x
-        output_reshape = torch.stack([torch.from_numpy(gfusedlasso(i.numpy(),a.numpy(),lam=lam.item()))
-                                      for i,a in zip(cpu_detach(inp_reshape).unbind(),cpu_detach(A_reshape).unbind())],dim=0)
+        # with mp.Pool(process_num) as p:
+        #     numpy_inp = cpu_detach(inp_reshape).numpy()#.unbind()
+        #     numpy_A = cpu_detach(A_reshape).numpy()#.unbind()
+        #     # numpy_lam = [lam.item()]*numpy_inp.shape[0]
+        #     numpy_zip = list(zip(numpy_inp,numpy_A))
+        #     numpy_zip_len = len(numpy_zip)
+        #     mp_input = [numpy_zip[int((mpi*numpy_zip_len)/process_num):int(((mpi+1)*numpy_zip_len)/process_num)] for mpi in range(process_num)]
+        #     mp_out = p.map(lambda arg:[gfusedlasso(i,a,lam.item()) for i,a in arg],mp_input)
+        #     numpy_out = [dd for d in mp_out for dd in d]
+        #     numpy_out = np.stack(numpy_out,axis=0)
+        # output_reshape = torch.from_numpy(numpy_out)
+        t1 = time.time()
+        numpy_inp = cpu_detach(inp_reshape).numpy()#.unbind()
+        numpy_A = cpu_detach(A_reshape).numpy()#.unbind()
+        numpy_lam = lam.item()
+        t2 = time.time()
+        output_reshape = torch.from_numpy(np.stack([gfusedlasso(i,a,lam=numpy_lam)
+                                      for i,a in zip(numpy_inp,numpy_A)],axis=0))
+        t3 = time.time()
+        print(t2-t1,t3-t2,(t3-t2)/(t2-t1))
         output = torch.transpose(torch.reshape(cuda_back(output_reshape),inp_reshape_size),dim,-1)
 
         ctx.dim, ctx.M, ctx.inp_reshape_size = dim, M, inp_reshape_size
         ctx.save_for_backward(output_reshape)
+        print('forward time: ', time.time() - ft)
         return output
 
     @staticmethod
     def backward(ctx, grad_output):
+        bt = time.time()
         if len(ctx.needs_input_grad) < 1 or not ctx.needs_input_grad[0]:
             raise ValueError('Only gradients for x in the gfusedlasso is implemented')
         if len(ctx.needs_input_grad) > 1 and ctx.needs_input_grad[1]:
@@ -133,6 +159,7 @@ class torch_gfusedlasso(torch.autograd.Function):
         )],dim=0)
         grad_inp = torch.transpose(torch.reshape(grad_inp_reshape,inp_reshape_size),dim,-1)
 
+        print('backward time:',time.time()-bt)
         return (grad_inp,)+(None,)*(len(ctx.needs_input_grad)-1)
 
 class Gfusedmax(torch.nn.Module):
